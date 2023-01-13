@@ -6,6 +6,8 @@ Imports System.Net
 Imports System.Net.Http
 Imports Microsoft.Win32
 Imports System.Linq.Expressions
+Imports System.Net.Http.Headers
+Imports System.Threading
 
 Public Class CallMuting8x8
 
@@ -28,6 +30,8 @@ Public Class CallMuting8x8
     Public Manual As Boolean = False
     Public myEmail As String = ""
     Public FlashOnError As Boolean = True
+
+    Public SkipLogWrite As Boolean = False
 
     <DllImport("user32.dll", EntryPoint:="GetForegroundWindow")> Private Shared Function GetForegroundWindow() As IntPtr
     End Function
@@ -61,6 +65,10 @@ Public Class CallMuting8x8
 
     Private Sub Form1_Load(sender As Object, e As EventArgs) Handles Me.Load
 
+
+RetryPoint:
+
+
         Dim _CallMutingTitles As String = System.Configuration.ConfigurationSettings.AppSettings("CallMutingTitles")
         Dim _logFile As String = System.Configuration.ConfigurationSettings.AppSettings("LogFilePath")
         Dim _TennantName As String = System.Configuration.ConfigurationSettings.AppSettings("TennantName")
@@ -72,8 +80,8 @@ Public Class CallMuting8x8
         Dim _overrideAccountName As String = System.Configuration.ConfigurationSettings.AppSettings("OverrideUsername")
         Dim _flashonerror As String = System.Configuration.ConfigurationSettings.AppSettings("FlashOnError")
 
-        Dim ConfigErrors As New List(Of String)
 
+        Dim ConfigErrors As New List(Of String)
 
         ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
 
@@ -265,11 +273,15 @@ Public Class CallMuting8x8
 
                     Else
 
+                        SkipLogWrite = False
+
                         wlog("eMail address returned from Identity Provider: " + myEmail)
 
                     End If
 
                 Else
+
+                    SkipLogWrite = False
 
                     wlog("eMail address returned from ConnectEndpointPlugin Cache: " + myEmail)
 
@@ -277,11 +289,20 @@ Public Class CallMuting8x8
 
             Else
 
+                SkipLogWrite = False
+
                 wlog("eMail address returned from AzureAD: " + myEmail)
 
             End If
 
+        Else
+
+            SkipLogWrite = False
+
+            wlog("eMail address returned from On-Prem AD: " + myEmail)
+
         End If
+
 
 
         teMail.Text = myEmail
@@ -334,7 +355,17 @@ Public Class CallMuting8x8
 
             wlog("CALL MUTING IS NOT ACTIVE")
 
+            Thread.Sleep(60000)
+
+            wlog("Retrying.  Further logging supressed until successful config achieved.")
+
+            SkipLogWrite = True
+
+            GoTo RetryPoint
+
         Else
+
+            SkipLogWrite = True
 
             If Not InvalidAPI Then
 
@@ -438,7 +469,11 @@ Public Class CallMuting8x8
 
         Try
 
-            File.AppendAllText(LogFile, Now.ToString("dd/MM/yyyy HH:mm:ss") + " - " + txt + vbCrLf)
+            If Not SkipLogWrite Then
+
+                File.AppendAllText(LogFile, Now.ToString("dd/MM/yyyy HH:mm:ss") + " - " + txt + vbCrLf)
+
+            End If
 
         Catch ex As Exception
 
